@@ -1,19 +1,21 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
-import Image from 'next/image'
 import { BsBack, BsFront } from 'react-icons/bs'
 import { FaRegTrashCan, FaRotateRight , FaDownload, FaUpload, FaPrint } from 'react-icons/fa6'
+import FabricCanvas from '@/components/fabric-canvas'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useElementSize } from '@/hooks/use-element-size'
 
 export default function NoshiInterface() {
   const [selectedDesign, setSelectedDesign] = useState('紅白結び切り (5本)')
   const [nameText, setNameText] = useState('')
   const [inkColor, setInkColor] = useState('dark')
+  const { ref: previewRef, size } = useElementSize<HTMLDivElement>()
   const [writingDirection, setWritingDirection] = useState('vertical')
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -212,27 +214,8 @@ export default function NoshiInterface() {
         <div className='bg-gray-300 w-full h-[1px]'></div>
 
         {/* Bottom Preview and Action Section */}
-        <div className="relative bg-white rounded-none shadow-md aspect-[1140/806]"
-        >
-          {uploadedImage && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Image
-                src={uploadedImage} 
-                alt="Uploaded"
-                fill
-                className="absolute object-cover"
-              />
-            </div>
-          )}
-
-          {nameText && (
-            <div className={`w-full h-full flex items-center justify-center ${
-                writingDirection === 'vertical' ? 'writing-vertical' : 'writing-horizontal'
-              } ${inkColor === 'dark' ? 'text-black' : 'text-[#c0c0c0]'} text-lg`}
-            >
-              {nameText}
-            </div>
-          )}
+        <div className="relative bg-white rounded-none shadow-md aspect-[1140/806]" ref={previewRef}>
+          <FabricCanvas imageUrl='/darkhorse.png' width={size.width} height={size.height} />
         </div>
       </div>
     </div>
