@@ -31,6 +31,7 @@
     "clsx": "^2.1.1",
     "eslint-plugin-storybook": "^0.11.4",
     "eslint-plugin-unused-imports": "^4.1.4",
+    "fabric": "^6.7.1",
     "holy-loader": "^2.3.13",
     "install": "^0.13.0",
     "lodash.throttle": "^4.1.1",
@@ -49,6 +50,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
+    "@types/fabric": "^5.3.10",
     "@types/lodash.throttle": "^4.1.9",
     "@types/node": "^20",
     "@types/react": "^18",
