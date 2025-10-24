@@ -26,13 +26,14 @@ type FabricCanvasLike = {
   bringObjectToFront: (obj: any) => void
   sendObjectToBack: (obj: any) => void
   discardActiveObject: () => void
+  backgroundImage: any
   requestRenderAll: () => void
   toDataURL: (options?: any) => string
   clear: () => void
 }
 
 export default function NoshiInterface() {
-  const [selectedDesign, setSelectedDesign] = useState('紅白結び切り (5本)')
+  const [selectedDesign, setSelectedDesign] = useState('sample_001')
   const [nameText, setNameText] = useState('')
   const [inkColor, setInkColor] = useState('dark')
   const { ref: previewRef, size } = useElementSize<HTMLDivElement>()
@@ -44,11 +45,9 @@ export default function NoshiInterface() {
   const fabricCanvasRef = useRef<FabricCanvasLike | null>(null)
 
   const designOptions = [
-    '紅白結び切り (5本)',
-    '紅白結び切り (7本)',
-    '金銀結び切り (5本)',
-    '金銀結び切り (7本)',
-    '水引のみ'
+    'sample_001',
+    'sample_002',
+    'sample_003'
   ]
 
   useEffect(() => {
@@ -59,9 +58,21 @@ export default function NoshiInterface() {
       const fabric = (mod as any).fabric || (mod as any).default?.fabric || (mod as any).default || (mod as any)
       fabricRef.current = fabric
       if (!canvasElRef.current || disposed) return
+      const img = await fabric.Image.fromURL(`/designs/${selectedDesign}.png`, { crossOrigin: 'anonymous' })
+      img.set({
+        originX: 'left',
+        originY: 'top',
+        selectable: false,
+        evented: false,
+        left: 0,
+        top: 0,
+        scaleX: size.width / img.width,
+        scaleY: size.height / img.height
+      })
       fabricCanvasRef.current = new fabric.Canvas(canvasElRef.current, {
         preserveObjectStacking: true,
         selection: true,
+        backgroundImage: img,
       })
       if (!fabricCanvasRef.current) return
       fabricCanvasRef.current.setWidth(size.width)
@@ -77,6 +88,27 @@ export default function NoshiInterface() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size])
+
+  const onSelectedDesignChange = async (value: string) => {
+    setSelectedDesign(value)
+    const canvas = fabricCanvasRef.current
+    const fabric = fabricRef.current
+    if (!canvas || !fabric) return
+
+    const img = await fabric.Image.fromURL(`/designs/${value}.png`, { crossOrigin: 'anonymous' })
+    img.set({
+      originX: 'left',
+      originY: 'top',
+      selectable: false,
+      evented: false,
+      left: 0,
+      top: 0,
+      scaleX: size.width / img.width,
+      scaleY: size.height / img.height
+    })
+    canvas.backgroundImage = img
+    canvas.requestRenderAll()
+  }
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -196,6 +228,8 @@ export default function NoshiInterface() {
 
     const dataURL = canvas.toDataURL({
       format: 'png',
+      enableRetinaScaling: true,
+      multiplier: 2,
       quality: 1,
     })
 
@@ -249,7 +283,7 @@ export default function NoshiInterface() {
         <div className="w-full flex flex-col sm:flex-row flex-wrap gap-5 sm:gap-2 sm:justify-between sm:items-center">
         	<div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <Label htmlFor="design-select" className="text-base whitespace-nowrap">デザインを選択</Label>
-            <Select value={selectedDesign} onValueChange={setSelectedDesign}>
+            <Select value={selectedDesign} onValueChange={value => onSelectedDesignChange(value)}>
 							<SelectTrigger id="design-select" className="w-60">
 								<SelectValue placeholder="デザインを選択" />
 							</SelectTrigger>
