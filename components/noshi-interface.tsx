@@ -1,9 +1,14 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+
+import React, { useState, useRef, useEffect } from 'react'
+import axios from 'axios'
 import { BsBack, BsFront } from 'react-icons/bs'
 import { FaRegTrashCan, FaRotateRight , FaDownload, FaUpload, FaPrint } from 'react-icons/fa6'
-import FabricCanvas from '@/components/fabric-canvas'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,14 +16,32 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useElementSize } from '@/hooks/use-element-size'
 
+type FabricCanvasLike = {
+  setWidth: (width: number) => void
+  setHeight: (height: number) => void
+  add: (obj: any) => void
+  dispose: () => void
+  getActiveObject: () => any
+  remove: (obj: any) => void
+  bringObjectToFront: (obj: any) => void
+  sendObjectToBack: (obj: any) => void
+  discardActiveObject: () => void
+  requestRenderAll: () => void
+  toDataURL: (options?: any) => string
+  clear: () => void
+}
+
 export default function NoshiInterface() {
   const [selectedDesign, setSelectedDesign] = useState('紅白結び切り (5本)')
   const [nameText, setNameText] = useState('')
   const [inkColor, setInkColor] = useState('dark')
   const { ref: previewRef, size } = useElementSize<HTMLDivElement>()
   const [writingDirection, setWritingDirection] = useState('vertical')
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const canvasElRef = useRef<HTMLCanvasElement | null>(null)
+  const fabricRef = useRef<any>(null)
+  const fabricCanvasRef = useRef<FabricCanvasLike | null>(null)
 
   const designOptions = [
     '紅白結び切り (5本)',
@@ -28,31 +51,196 @@ export default function NoshiInterface() {
     '水引のみ'
   ]
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setUploadedImage(e.target?.result as string)
+  useEffect(() => {
+    let disposed = false
+
+    async function init() {
+      const mod = await import('fabric')
+      const fabric = (mod as any).fabric || (mod as any).default?.fabric || (mod as any).default || (mod as any)
+      fabricRef.current = fabric
+      if (!canvasElRef.current || disposed) return
+      fabricCanvasRef.current = new fabric.Canvas(canvasElRef.current, {
+        preserveObjectStacking: true,
+        selection: true,
+      })
+      if (!fabricCanvasRef.current) return
+      fabricCanvasRef.current.setWidth(size.width)
+      fabricCanvasRef.current.setHeight(size.height)
+    }
+    void init()
+    return () => {
+      disposed = true
+      if (fabricCanvasRef.current) {
+        fabricCanvasRef.current.dispose()
+        fabricCanvasRef.current = null
       }
-      reader.readAsDataURL(file)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size])
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file && file.type.startsWith('image/')) {
+      const formData = new FormData()
+      formData.append('image', file)
+
+      const { data: { fileName } } = await axios.post<{ fileName: string }>('/api/upload-image', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+      const canvas = fabricCanvasRef.current
+      const fabric = fabricRef.current
+      if (!canvas || !fabric) return
+      const img = await fabric.Image.fromURL(`/images/${fileName}`, { crossOrigin: 'anonymous' })
+      img.set({
+        left: 60 * size.width / 1140,
+        top: 80 * size.height / 806,
+        scaleX: size.width / (3 * 1140),
+        scaleY: size.height / (3 * 806),
+        angle: 0,
+        cornerSize: 10,
+        lockScalingFlip: true,
+        selectable: true
+      })
+      canvas.add(img)
     }
   }
 
-  const handlePlacementOperation = (operation: string) => {
-    console.log(`Placement operation: ${operation}`)
+  const handleObjectToFront = () => {
+    const canvas = fabricCanvasRef.current
+    if (!canvas) return
+    const activeObject = canvas.getActiveObject()
+    if (activeObject) {
+      canvas.bringObjectToFront(activeObject)
+      canvas.requestRenderAll()
+    }
   }
 
-  const handleApply = () => {
-    console.log('Applying changes...')
+  const handleObjectToBack = () => {
+    const canvas = fabricCanvasRef.current
+    if (!canvas) return
+    const activeObject = canvas.getActiveObject()
+    if (activeObject) {
+      canvas.sendObjectToBack(activeObject)
+      canvas.requestRenderAll()
+    }
+  }
+
+  const handleObjectDelete = () => {
+    const canvas = fabricCanvasRef.current
+    if (!canvas) return
+    const activeObject = canvas.getActiveObject()
+    if (activeObject) {
+      canvas.remove(activeObject)
+      canvas.discardActiveObject()
+      canvas.requestRenderAll()
+    }
+  }
+
+  const handleObjectReset = () => {
+    const canvas = fabricCanvasRef.current
+    if (!canvas) return
+    canvas.clear()
+  }
+
+  const handleTextApply = () => {
+    const canvas = fabricCanvasRef.current
+    const fabric = fabricRef.current
+    if (!canvas || !fabric) return
+    if (writingDirection === 'horizontal') {
+      const horizontalText = new fabric.IText(nameText, {
+        left: size.width / 2,
+        top: size.height / 2,
+        fontSize: 50 * size.width / 1140,
+        editable: false,
+        lockScalingFlip: true,
+        fill: inkColor === 'dark' ? '#000' : '#C0C0C0',
+        cornerSize: 10,
+      })
+      canvas.add(horizontalText)
+    } else {
+      const characters = nameText.split('')
+      const fontSize = 50 * size.width / 1140
+      const lineHeight = fontSize
+      const textObjects: any[] = []
+      
+      characters.forEach((char, index) => {
+        const textbox = new fabric.IText(char, {
+          left: size.width / 2,
+          top: size.height / 2 + index * lineHeight,
+          fontSize: fontSize,
+          editable: false,
+          lockScalingFlip: true,
+          fill: inkColor === 'dark' ? '#000' : '#C0C0C0',
+          cornerSize: 10,
+          originX: 'center',
+        })
+        textObjects.push(textbox)
+      })
+      
+      const group = new fabric.Group(textObjects, {
+        left: size.width / 2,
+        top: size.height / 2,
+        hasRotatingPoint: true,
+        lockRotation: false,
+        cornerSize: 10,
+      })
+      canvas.add(group)
+    }
   }
 
   const handleSaveImage = () => {
-    console.log('Saving image...')
+    const canvas = fabricCanvasRef.current
+    if (!canvas) return
+
+    const dataURL = canvas.toDataURL({
+      format: 'png',
+      quality: 1,
+    })
+
+    const link = document.createElement('a')
+    link.href = dataURL
+    link.download = Date.now().toString()
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const handlePrint = () => {
-    console.log('Printing...')
+    const canvas = fabricCanvasRef.current
+    if (!canvas) return
+
+    const dataURL = canvas.toDataURL({
+      format: 'png',
+      quality: 3,
+    })
+
+    void import('jspdf').then((jsPDFModule) => {
+      const jsPDF = jsPDFModule.default || jsPDFModule.jsPDF
+      const pdf = new jsPDF({
+        orientation: size.width > size.height ? 'l' : 'p',
+        unit: 'mm',
+        format: 'a4',
+      })
+
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+
+      let imgWidth = pageWidth
+      let imgHeight = (size.height / size.width) * pageWidth
+
+      if (imgHeight > pageHeight) {
+        imgHeight = pageHeight
+        imgWidth = (size.width / size.height) * pageHeight
+      }
+
+      const x = (pageWidth - imgWidth) / 2
+      const y = (pageHeight - imgHeight) / 2
+
+      pdf.addImage(dataURL, 'PNG', x, y, imgWidth, imgHeight)
+      pdf.save(`${Date.now()}.pdf`)
+    })
   }
 
   return (
@@ -87,7 +275,7 @@ export default function NoshiInterface() {
             <Button 
               variant="outline" 
               onClick={() => fileInputRef.current?.click()}
-              className="rounded-xs whitespace-nowrap w-60 sm:w-40"
+              className="rounded-xs whitespace-nowrap w-60 sm:w-40 bg-white"
             >
               <FaUpload className="w-4 h-4 mr-2" />
               <span>ファイルを選択</span>
@@ -98,28 +286,28 @@ export default function NoshiInterface() {
             <Label className="text-base whitespace-nowrap">配置操作</Label>
             <div className="flex flex-wrap gap-2">
               <Button 
-                onClick={() => handlePlacementOperation('front')}
+                onClick={handleObjectToFront}
                 className='px-2 py-1 gap-2 rounded-xs bg-m-btn text-white border-m-btn transition duration-700 ease-out'
               >
                 <BsFront className="w-4 h-4" />
                 <span>前⾯へ</span>
               </Button>
               <Button 
-                onClick={() => handlePlacementOperation('back')}
+                onClick={handleObjectToBack}
                 className='px-2 py-1 gap-2 rounded-xs bg-m-btn text-white border-m-btn transition duration-700 ease-out'
               >
                 <BsBack className="w-4 h-4" />
                 <span>背⾯へ</span>
               </Button>
               <Button 
-                onClick={() => handlePlacementOperation('delete')}
+                onClick={handleObjectDelete}
                 className='px-2 py-1 gap-2 rounded-xs bg-m-btn text-white border-m-btn transition duration-700 ease-out'
               >
                 <FaRegTrashCan className="w-4 h-4" />
                 <span>選択削除</span>
               </Button>
               <Button 
-                onClick={() => handlePlacementOperation('reset')}
+                onClick={handleObjectReset}
                 className='px-2 py-1 gap-2 rounded-xs bg-m-btn text-white border-m-btn transition duration-700 ease-out'
               >
                 <FaRotateRight className="w-4 h-4" />
@@ -176,7 +364,7 @@ export default function NoshiInterface() {
 
               {/* Apply Button */}
               <Button 
-                onClick={handleApply}
+                onClick={handleTextApply}
                 className="bg-[#b4a37d] hover:bg-[#b4a37d]/80 text-white text-md px-14 py-7 rounded-none transition duration-700 ease-out ml-auto"
               >
                 反映
@@ -213,9 +401,8 @@ export default function NoshiInterface() {
 
         <div className='bg-gray-300 w-full h-[1px]'></div>
 
-        {/* Bottom Preview and Action Section */}
         <div className="relative bg-white rounded-none shadow-md aspect-[1140/806]" ref={previewRef}>
-          <FabricCanvas imageUrl='/darkhorse.png' width={size.width} height={size.height} />
+          <canvas ref={canvasElRef} />
         </div>
       </div>
     </div>
