@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 4040",
+    "dev": "next dev",
     "build": "next build --debug",
-    "start": "next start -p 4040",
+    "start": "next start",
     "lint": "eslint ./**/*.{ts,tsx} --fix",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "prepare": "husky install"
